@@ -10,7 +10,10 @@ from dataloaders.data_utils.lmdb_utils import LMDBUtility
 from tqdm import tqdm
 import pandas as pd
 import ignite.distributed as idist
+import cv2
+import os
 
+YOLO_BOX_DIR = "/data/sign2gpt/Sign2GPT/data/phoenix2014t/yolo_boxes"
 
 class PhoenixVideoDataset(Dataset):
     def __init__(
@@ -33,6 +36,9 @@ class PhoenixVideoDataset(Dataset):
         self.dict_sentence = dict_sentence
         self.dict_lem_to_id = dict_lem_to_id
         self.dict_lem_counter = dict_lem_counter
+        self.use_yolo_boxes = True
+        self.yolo_box_dir = YOLO_BOX_DIR
+        self.boxes_cache = {}
 
     def __len__(self):
         return len(self.items)
@@ -45,12 +51,14 @@ class PhoenixVideoDataset(Dataset):
     def __getitem__(self, idx):
         item = self.items[idx]
         file_name = item["name"]
+        if self.use_yolo_boxes and file_name not in self.boxes_cache:
+            box_path = os.path.join(self.yolo_box_dir, f"{file_name}.npy")
+            self.boxes_cache[file_name] = np.load(box_path, allow_pickle=True).item()
 
         if not self.lmdb_util_video:
             self.lmdb_util_video = LMDBUtility(
                 f"{self.lmdb_dir}/{file_name}",
             )
-
             self.num_frames = self.lmdb_util_video.details["num_frames"]
 
         if self.isValid:
@@ -75,6 +83,27 @@ class PhoenixVideoDataset(Dataset):
 
         frames = self.lmdb_util_video.get_frames(selection)
 
+        processed_frames = []
+        
+        for frame_idx, frame in zip(selection, frames):
+            person_box = self.boxes_cache[file_name].get(frame_idx)
+            h, w, _ = frame.shape
+            if person_box is None:
+                side = min(h, w)
+                y1 = (h - side) // 2
+                x1 = (w - side) // 2
+                crop = frame[y1:y1 + side, x1:x1 + side]
+                crop_224 = cv2.resize(crop, (224, 224), interpolation=cv2.INTER_LINEAR)
+            else:
+                x1, y1, x2, y2 = person_box
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(w, x2), min(h, y2)
+                crop = frame[y1:y2, x1:x2]
+                crop_224 = cv2.resize(crop, (224, 224), interpolation=cv2.INTER_LINEAR)
+    
+            processed_frames.append(crop_224)
+        
+        frames = processed_frames
         if self.transform:
             frames = self.transform.aug_video(frames, self.isValid)
         else:
