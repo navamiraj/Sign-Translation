@@ -17,7 +17,7 @@ def get_config():
     base_name = Path(os.path.realpath(__file__)).parent.name
     code_path = str(Path(os.path.realpath(__file__)).resolve().parents[3])
 
-    cfg.log_name = "hand_emb_256"
+    cfg.log_name = "pose_gcn"
     ckpt_path = get_checkpoint_path(base_name, cfg.name)
     lmdb_path = get_lmdb_path()
     cfg.save_dir = f"{ckpt_path}/{base_name}/{cfg.name}"

@@ -23,7 +23,8 @@ def get_sign_encoder():
             "use_hand_emb": True,
             "num_hands": 2,
             "hand_emb_dim": 208,
-            "fusion_dim": 256, 
+            "fusion_dim": 256,
+            "pose_encoder_type": "gcn",
         },
         "encoder_name": "models.metaformer.meta_model",
         "encoder_params": {
